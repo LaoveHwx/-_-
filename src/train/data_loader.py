@@ -37,19 +37,38 @@ def load_dataset():
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
 
+    # ===测试代码开始===
+    print("标签映射:")
+    for i, name in enumerate(le.classes_):
+        print(i, name)
+    # ===测试代码结束===
+
     # one-hot
     # 将整数编码的标签转换为 one-hot 编码，用于多分类任务
     y_onehot = to_categorical(y_encoded)
 
+    # ===测试代码开始===
+    print("onehot example:")
+    print(y_onehot[:5])
+    # ===测试代码结束===
+
     # 划分训练/测试
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y_onehot,
-        test_size=0.2,
+    X_train, X_temp, y_train, y_temp, y_train_label, y_temp_label = train_test_split(
+        X,y_onehot,y_encoded,
+        test_size=0.3,
         random_state=42,
         stratify=y_encoded
     )
 
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_temp,y_temp,
+        test_size=0.5,
+        random_state=42,
+        stratify=y_temp_label
+    )
+
     print("训练集:", X_train.shape)
+    print("验证集:", X_val.shape)
     print("测试集:", X_test.shape)
 
-    return X_train, X_test, y_train, y_test, le
+    return X_train, X_val, X_test, y_train, y_val, y_test, le
