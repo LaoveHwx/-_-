@@ -62,7 +62,7 @@ GESTURES = {
     ord('3'): 'number1',
     ord('4'): 'number2',
     ord('5'): 'number3',
-    ord('6'): 'ok',
+    ord('6'): 'heart',
     ord('7'): 'right',
     ord('8'): 'stop',
 }

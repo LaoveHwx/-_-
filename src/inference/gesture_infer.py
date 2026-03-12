@@ -25,8 +25,10 @@ class GestureInference:
         self.gesture_labels = [
             "good",
             "left",
-            # "right",
-            # "stop"
+            "number1","number2","number3",
+            "heart",
+            "right",
+            "stop"
         ]
 
         # -----------------------------
