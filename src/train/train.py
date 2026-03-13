@@ -2,7 +2,7 @@
 from data_loader import load_dataset
 from model import build_model
 from pathlib import Path
-
+import json
 
 def main():
 
@@ -38,6 +38,14 @@ def main():
     model_path.mkdir(exist_ok=True)
 
     model.save(model_path / "gesture_model.keras")
+
+    # 保存标签顺序
+    labels_path = PROJECT_ROOT / "models" / "labels.json"
+
+    with open(labels_path, "w", encoding="utf-8") as f:
+        json.dump(list(le.classes_), f)
+
+    print("Labels saved:", labels_path)
 
     print("模型已保存为gesture_model.keras")
 

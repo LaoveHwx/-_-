@@ -3,6 +3,8 @@ import mediapipe as mp
 import numpy as np
 import os
 from pathlib import Path
+from src.utils.labels import get_labels_order
+
 # 借用指令from src.capture.hand_tracker import HandTracker
 
 class HandTracker:
@@ -70,16 +72,26 @@ class HandTracker:
 
         return pts.flatten().astype("float32")  # (42,)
 
-GESTURES = {
-    ord('1'): 'good',
-    ord('2'): 'left',
-    ord('3'): 'number1',
-    ord('4'): 'number2',
-    ord('5'): 'number3',
-    ord('6'): 'heart',
-    ord('7'): 'right',
-    ord('8'): 'stop',
-}
+# GESTURES = {
+#     ord('1'): 'good',
+#     ord('2'): 'left',
+#     ord('3'): 'number1',
+#     ord('4'): 'number2',
+#     ord('5'): 'number3',
+#     ord('6'): 'heart',
+#     ord('7'): 'right',
+#     ord('8'): 'stop',
+# }
+#=====⬇️替换标签获取方式
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+labels_order = get_labels_order(PROJECT_ROOT)  # 会自动创建 models/labels.json（若不存在）
+
+# 生成按键映射：数字键 '1' -> labels_order[0], '2' -> labels_order[1], ...
+GESTURES = { ord(str(i+1)): label for i, label in enumerate(labels_order) }
+
+print("Key -> gesture mapping:")
+for i, label in enumerate(labels_order):
+    print(f"  {i+1} -> {label}")
 
 SAMPLES_PER_CLASS = 500
 
