@@ -1,3 +1,10 @@
+import sys
+from pathlib import Path
+
+# 将项目根目录添加到 Python 路径
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+
 import cv2
 import mediapipe as mp
 import tensorflow as tf

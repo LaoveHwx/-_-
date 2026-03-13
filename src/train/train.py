@@ -1,8 +1,15 @@
+# import sys
+# from pathlib import Path
+
+# # 将项目根目录添加到 Python 路径
+# PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# sys.path.insert(0, str(PROJECT_ROOT))
+
 # 训练脚本
 from pathlib import Path
 from src.core.data_manager import DataManager
 from src.core.model_manager import ModelManager
-import json
+
 
 def main():
     PROJECT_ROOT = Path(__file__).resolve().parents[2]
