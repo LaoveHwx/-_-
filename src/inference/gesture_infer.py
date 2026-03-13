@@ -3,7 +3,7 @@ import mediapipe as mp
 import tensorflow as tf
 import numpy as np
 from pathlib import Path
-
+from collections import deque
 
 class GestureInference:
 
@@ -19,9 +19,7 @@ class GestureInference:
 
         self.model = tf.keras.models.load_model(model_path)
 
-        # -----------------------------
-        # 2 手势标签（必须和训练一致）
-        # -----------------------------
+        # 2 手势标签
         self.gesture_labels = [
             "good",
             "left",
@@ -30,7 +28,8 @@ class GestureInference:
             "right",
             "stop"
         ]
-
+        # 滑动窗口
+        self.history = deque(maxlen=5)
         # -----------------------------
         # 3 MediaPipe 初始化
         # -----------------------------
@@ -46,7 +45,7 @@ class GestureInference:
         self.mp_drawing = mp.solutions.drawing_utils
 
     # ------------------------------------------------
-    # 关键点提取（必须 42 维）
+    # 关键点提取（必须 42 维）再归一化
     # ------------------------------------------------
     def extract_keypoints(self, hand_landmarks):
 
@@ -56,25 +55,55 @@ class GestureInference:
             keypoints.append(lm.x)
             keypoints.append(lm.y)
 
-        keypoints = np.array(keypoints, dtype=np.float32)
+        return np.array(keypoints, dtype="float32")
 
-        return keypoints.reshape(1, -1)
+    def normalize_keypoints(self, keypoints):
+
+        pts = keypoints.reshape(21, 2)
+
+        wrist = pts[0]
+        pts = pts - wrist
+
+        scale = np.linalg.norm(pts[9])
+
+        if scale > 1e-6:
+            pts = pts / scale
+
+        return pts.flatten().astype("float32")
 
     # ------------------------------------------------
     # 手势预测
     # ------------------------------------------------
+    # def predict(self, keypoints):
+    #
+    #     preds = self.model.predict(keypoints, verbose=0)
+    #
+    #     class_id = np.argmax(preds)
+    #
+    #     confidence = preds[0][class_id]
+    #
+    #     label = self.gesture_labels[class_id]
+    #
+    #     return label, confidence
+
     def predict(self, keypoints):
 
         preds = self.model.predict(keypoints, verbose=0)
 
+        print("preds:", preds)  # 调试用
+
         class_id = np.argmax(preds)
 
         confidence = preds[0][class_id]
+# 置信度过滤
+        if confidence < 0.9:
+            return "unknown", confidence
+        self.history.append(class_id)
 
-        label = self.gesture_labels[class_id]
+        # 投票
+        final_id = max(set(self.history), key=self.history.count)
 
-        return label, confidence
-
+        return self.gesture_labels[final_id], confidence
     # ------------------------------------------------
     # 主循环
     # ------------------------------------------------
@@ -115,7 +144,8 @@ class GestureInference:
 
                     # 提取关键点
                     keypoints = self.extract_keypoints(hand_landmarks)
-
+                    keypoints = self.normalize_keypoints(keypoints)
+                    keypoints = keypoints.reshape(1, -1)
                     # 推理
                     gesture, conf = self.predict(keypoints)
 
@@ -157,3 +187,4 @@ if __name__ == "__main__":
     infer = GestureInference()
 
     infer.run()
+

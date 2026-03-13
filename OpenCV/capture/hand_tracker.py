@@ -38,23 +38,37 @@ class HandTracker:
                 keypoints = self.normalize_keypoints(raw_keypoints)
 
         return frame, keypoints
-    # 手部关键点归一化
-    def normalize_keypoints(self, keypoints):
-        keypoints = keypoints.reshape(21, 3)
+    # # 手部关键点归一化
+    # def normalize_keypoints(self, keypoints):
+    #     keypoints = keypoints.reshape(21, 3)
+    #
+    #     # 以手腕为原点
+    #     wrist = keypoints[0]
+    #     keypoints = keypoints - wrist
+    #
+    #     # 只取 x,y
+    #     keypoints = keypoints[:, :2]
+    #
+    #     # 计算最大距离
+    #     max_value = np.max(np.abs(keypoints))
+    #     if max_value != 0:
+    #         keypoints = keypoints / max_value
+    #
+    #     return keypoints.flatten()  # (42,)
+    def normalize_keypoints(keypoints):
+        # keypoints: (42,)
+        pts = keypoints.reshape(21, 2)
 
-        # 以手腕为原点
-        wrist = keypoints[0]
-        keypoints = keypoints - wrist
+        # 以 wrist 为原点
+        wrist = pts[0]
+        pts = pts - wrist
 
-        # 只取 x,y
-        keypoints = keypoints[:, :2]
+        # 以手掌尺度归一
+        scale = np.linalg.norm(pts[9])  # middle_mcp
+        if scale > 1e-6:
+            pts = pts / scale
 
-        # 计算最大距离
-        max_value = np.max(np.abs(keypoints))
-        if max_value != 0:
-            keypoints = keypoints / max_value
-
-        return keypoints.flatten()  # (42,)
+        return pts.flatten().astype("float32")  # (42,)
 
 GESTURES = {
     ord('1'): 'good',
@@ -178,3 +192,11 @@ def run_camera_test():
 
 if __name__ == "__main__":
     run_camera_test()
+# from pathlib import Path
+# import numpy as np
+#
+# PROJECT_ROOT = Path(__file__).resolve().parents[2]  # Project Root
+# file_path = PROJECT_ROOT / "data" / "keypoints" / "good" / "0.npy"
+#
+# x = np.load(file_path)
+# print(x.shape, x[:6])
