@@ -63,7 +63,8 @@ class GestureInference:
     def predict(self, keypoints):
         keypoints = np.asarray(keypoints, dtype="float32")
         preds = self.model.predict(keypoints, verbose=0)  # shape (1, num_classes)
-        print("preds:", preds)  # 调试用
+
+        # print("preds:", preds)  # 调试用
 
         class_id = int(np.argmax(preds))
         confidence = float(preds[0][class_id])
