@@ -25,6 +25,7 @@ python src/train/train.py
 3. 运行实时推理：
 ```bash
 python src/inference/gesture_infer.py
+python main.py
 ```
 
 ## 注意事项
