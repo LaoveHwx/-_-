@@ -3,22 +3,28 @@ import mediapipe as mp
 import numpy as np
 import os
 from pathlib import Path
-from src.utils.labels import LabelRepository
 from src.utils.normalizer import normalize_keypoints
 
-# 借用指令from src.capture.hand_tracker import HandTracker
+# import sys
+# 运行的时候把这个部分解除注释就行
+# PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# sys.path.append(str(PROJECT_ROOT))
+# from src.utils.labels import LabelRepository
 
+
+# 借用指令from src.capture.hand_tracker import HandTracker
 class HandTracker:
     def __init__(self):
-        self.mp_hands = mp.solutions.hands # type: ignore
+        self.mp_hands = mp.solutions.hands  # type: ignore
         self.hands = self.mp_hands.Hands(
             static_image_mode=False,
             max_num_hands=1,
             min_detection_confidence=0.7,
-            min_tracking_confidence=0.7
+            min_tracking_confidence=0.7,
         )
-        self.mp_draw = mp.solutions.drawing_utils # type: ignore
-    # 处理帧
+        self.mp_draw = mp.solutions.drawing_utils  # type: ignore
+
+    # 处理帧：输入一帧图像，输出绘制关键点后的帧和归一化关键点
     def process_frame(self, frame):
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.hands.process(rgb_frame)
@@ -27,11 +33,10 @@ class HandTracker:
 
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
-
                 self.mp_draw.draw_landmarks(
                     frame,
                     hand_landmarks,
-                    self.mp_hands.HAND_CONNECTIONS
+                    self.mp_hands.HAND_CONNECTIONS,
                 )
 
                 points = []
@@ -41,124 +46,144 @@ class HandTracker:
                 keypoints = normalize_keypoints(raw_keypoints)
 
         return frame, keypoints
-    # # 手部关键点归一化,到 src/utils/normalizer.py
+
+
 SAMPLES_PER_CLASS = 500
 
-def run_camera_test():
-    cap = cv2.VideoCapture(0) # 0 默认摄像头
-    tracker = HandTracker() # 创建手部检测器
 
-    # 项目根目录，当前目录上2级parents[2]
-    PROJECT_ROOT = Path(__file__).resolve().parents[2]
-    # 数据目录
-    base_path = PROJECT_ROOT / "data" / "keypoints"
-    # 创建数据目录
-    os.makedirs(base_path, exist_ok=True)
+class HandDataCollector:
+    """负责摄像头采集、按键控制和关键点保存的类。"""
 
-    # 通过标签仓储加载 / 创建 labels.json，并生成按键映射
-    label_repo = LabelRepository(PROJECT_ROOT)
-    labels_order = label_repo.get_labels_order()
-    gestures = {ord(str(i + 1)): label for i, label in enumerate(labels_order)}
+    def __init__(self, project_root: Path | None = None, camera_index: int = 0):
+        # 摄像头
+        self.cap = cv2.VideoCapture(camera_index)
+        # 手部关键点跟踪
+        self.tracker = HandTracker()
 
-    print("Key -> gesture mapping:")
-    for i, label in enumerate(labels_order):
-        print(f"  {i+1} -> {label}")
-    # 当前类别
-    current_label = None
-    # 样本计数
-    sample_count = 0
-    # 采集状态
-    collecting = False
+        # 项目根目录，当前目录上 2 级 parents[2]
+        self.project_root = project_root or Path(__file__).resolve().parents[2]
+        # 数据目录
+        self.base_path = self.project_root / "data" / "keypoints"
+        os.makedirs(self.base_path, exist_ok=True)
 
-    print("1~8 选择类别")
-    print("c 开始采集")
-    print("v 暂停采集")
-    print("ESC 退出")
+        # 通过标签仓储加载 / 创建 labels.json，并生成按键映射
+        self.label_repo = LabelRepository(self.project_root)
+        labels_order = self.label_repo.get_labels_order()
+        self.gestures = {ord(str(i + 1)): label for i, label in enumerate(labels_order)}
 
-    while True:
-        # 从摄像头捕获一帧图像
-        # cap.read() 返回一个元组 (ret, frame)
-        ret, frame = cap.read()
-        # 检查是否成功读取到帧
-        # 如果 ret 为 False，表示读取失败（例如摄像头断开或视频结束）
-        if not ret:
-            # 跳出循环，结束程序
-            break
-        # 处理帧：执行手部检测与关键点提取，并等待键盘输入（1ms）
-        frame, keypoints = tracker.process_frame(frame)
-        key = cv2.waitKey(1) & 0xFF
+        # 运行时状态
+        self.current_label: str | None = None
+        self.sample_count: int = 0
+        self.collecting: bool = False
 
+        print("Key -> gesture mapping:")
+        for i, label in enumerate(labels_order):
+            print(f"  {i + 1} -> {label}")
+
+        print("1~8 选择类别")
+        print("c 开始采集")
+        print("v 暂停采集")
+        print("ESC 退出")
+
+    def _class_dir(self, label: str) -> str:
+        class_dir = os.path.join(self.base_path, label)
+        os.makedirs(class_dir, exist_ok=True)
+        return class_dir
+
+    def _load_count(self, label: str) -> None:
+        class_dir = self._class_dir(label)
+        count_file = os.path.join(class_dir, "count.txt")
+        if os.path.exists(count_file):
+            with open(count_file, "r") as f:
+                self.sample_count = int(f.read().strip())
+        else:
+            self.sample_count = 0
+
+    def _save_count(self) -> None:
+        if not self.current_label:
+            return
+        class_dir = self._class_dir(self.current_label)
+        count_file = os.path.join(class_dir, "count.txt")
+        with open(count_file, "w") as f:
+            f.write(str(self.sample_count))
+
+    def _save_sample(self, keypoints: np.ndarray) -> None:
+        if not self.current_label:
+            return
+        class_dir = self._class_dir(self.current_label)
+        file_path = os.path.join(class_dir, f"{self.sample_count}.npy")
+        np.save(file_path, keypoints)
+        self.sample_count += 1
+
+    def _handle_key(self, key: int) -> None:
         # 选择类别
-        if key in gestures:
-            current_label = gestures[key]
-            class_dir = os.path.join(base_path, current_label)
-            os.makedirs(class_dir, exist_ok=True)
-
-            count_file = os.path.join(class_dir, "count.txt")
-
-            if os.path.exists(count_file):
-                with open(count_file, "r") as f:
-                    sample_count = int(f.read().strip())
-            else:
-                sample_count = 0
-
-            print(f"当前类别: {current_label}")
-            print(f"已存在样本: {sample_count}")
-            collecting = False
+        if key in self.gestures:
+            self.current_label = self.gestures[key]
+            self._load_count(self.current_label)
+            print(f"当前类别: {self.current_label}")
+            print(f"已存在样本: {self.sample_count}")
+            self.collecting = False
 
         # 开始采集
-        if key == ord('c') and current_label:
-            if sample_count >= SAMPLES_PER_CLASS:
+        if key == ord("c") and self.current_label:
+            if self.sample_count >= SAMPLES_PER_CLASS:
                 print("该类别已达 500，无需继续")
             else:
-                collecting = True
+                self.collecting = True
                 print("开始采集")
 
         # 暂停采集
-        if key == ord('v') and current_label:
-            collecting = False
-            class_dir = os.path.join(base_path, current_label)
-            count_file = os.path.join(class_dir, "count.txt")
-
-            with open(count_file, "w") as f:
-                f.write(str(sample_count))
-
+        if key == ord("v") and self.current_label:
+            self.collecting = False
+            self._save_count()
             print("已暂停并保存进度")
 
-        # 采集逻辑
-        if collecting and keypoints is not None:
-            if sample_count < SAMPLES_PER_CLASS:
-                class_dir = os.path.join(base_path, current_label) # type: ignore
+    def run(self) -> None:
+        try:
+            while True:
+                # 从摄像头捕获一帧图像
+                ret, frame = self.cap.read()
+                if not ret:
+                    break
 
-                file_path = os.path.join(
-                    class_dir,
-                    f"{sample_count}.npy"
-                )
+                # 处理帧：执行手部检测与关键点提取
+                frame, keypoints = self.tracker.process_frame(frame)
+                key = cv2.waitKey(1) & 0xFF
 
-                np.save(file_path, keypoints)
-                sample_count += 1
+                # 按键处理
+                self._handle_key(key)
 
-                cv2.putText(
-                    frame,
-                    f"{current_label}: {sample_count}/{SAMPLES_PER_CLASS}",
-                    (10, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2
-                )
+                # 采集逻辑
+                if self.collecting and keypoints is not None:
+                    if self.sample_count < SAMPLES_PER_CLASS:
+                        self._save_sample(keypoints)
+                        cv2.putText(
+                            frame,
+                            f"{self.current_label}: {self.sample_count}/{SAMPLES_PER_CLASS}",
+                            (10, 40),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            1,
+                            (0, 255, 0),
+                            2,
+                        )
+                    else:
+                        self.collecting = False
+                        print("该手势类别采集完成")
 
-            else:
-                collecting = False
-                print("该手势类别采集完成")
+                cv2.imshow("数据收集", frame)
 
-        cv2.imshow("数据收集", frame)
-        # ESC 退出
-        if key == 27:
-            break
+                # ESC 退出
+                if key == 27:
+                    break
+        finally:
+            self.cap.release()
+            cv2.destroyAllWindows()
 
-    cap.release()
-    cv2.destroyAllWindows()
+
+def run_camera_test():
+    """保留原有函数入口，内部使用 OOD 的 HandDataCollector。"""
+    collector = HandDataCollector()
+    collector.run()
 
 if __name__ == "__main__":
     run_camera_test()

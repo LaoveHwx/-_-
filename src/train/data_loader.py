@@ -1,4 +1,5 @@
 import json
+import os
 import numpy as np
 from pathlib import Path
 from sklearn.model_selection import train_test_split
@@ -6,6 +7,11 @@ from tensorflow.keras.utils import to_categorical
 # 多线程版本
 from concurrent.futures import ThreadPoolExecutor
 from src.utils.labels import LabelRepository
+
+
+def _get_loader_workers(task_count: int) -> int:
+    cpu_count = os.cpu_count() or 1
+    return max(1, min(task_count, cpu_count * 2, 16))
 
 def load_single_file(args):
     npy_file, label = args
@@ -41,7 +47,7 @@ def load_dataset():
     y = []
 
     # 多线程读取
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=_get_loader_workers(len(tasks))) as executor:
         results = executor.map(load_single_file, tasks)
 
     for r in results:
