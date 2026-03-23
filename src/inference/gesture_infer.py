@@ -11,21 +11,22 @@ import tensorflow as tf
 import numpy as np
 from pathlib import Path
 from collections import deque
-from src.utils.labels import get_labels_order
+from src.utils.labels import LabelRepository
 
 class GestureInference:
 
     def __init__(self, conf_threshold: float = 0.7, history_len: int = 5):
         # 计算项目根路径（文件位于 src/inference -> parents[2] 通常到项目根）
-        project_root = Path(__file__).resolve().parents[2]
-        model_path = project_root / "models" / "gesture_model.keras"
+        self.project_root = Path(__file__).resolve().parents[2]
+        model_path = self.project_root / "models" / "gesture_model.keras"
 
         # 加载模型
         print("Loading model:", model_path)
         self.model = tf.keras.models.load_model(model_path)
 
-        # 统一从 models/labels.json 读取标签顺序（get_labels_order 会创建或读取该文件）
-        self.gesture_labels = get_labels_order(project_root)
+        # 统一从 models/labels.json 读取标签顺序（通过 LabelRepository 统一管理）
+        label_repo = LabelRepository(self.project_root)
+        self.gesture_labels = label_repo.get_labels_order()
         print("Loaded gesture labels:", self.gesture_labels)
 
         # 参数

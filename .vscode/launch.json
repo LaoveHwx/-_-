@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Run File (integratedTerminal)",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Python: Train (integratedTerminal)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/train/train.py",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Python: Infer (integratedTerminal)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/inference/gesture_infer.py",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

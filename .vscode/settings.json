@@ -1,4 +1,10 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:conda",
-    "python-envs.defaultPackageManager": "ms-python.python:conda"
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "python.defaultInterpreterPath": "F:/Anaconda3/envs/GraduationProject/python.exe",
+    "python.terminal.activateEnvironment": true,
+    "terminal.integrated.shellIntegration.enabled": false,
+    "terminal.integrated.defaultProfile.windows": "PowerShell"
+  
+
 }

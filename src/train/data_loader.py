@@ -5,7 +5,7 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
 # 多线程版本
 from concurrent.futures import ThreadPoolExecutor
-from src.utils.labels import get_labels_order
+from src.utils.labels import LabelRepository
 
 def load_single_file(args):
     npy_file, label = args
@@ -21,8 +21,10 @@ def load_dataset():
     PROJECT_ROOT = Path(__file__).resolve().parents[2]
     data_path = PROJECT_ROOT / "data" / "keypoints"
 
-    # 从统一配置读取标签顺序（models/labels.json）
-    labels_order = get_labels_order(PROJECT_ROOT)
+    # 从统一标签仓储读取标签顺序（models/labels.json）
+    label_repo = LabelRepository(PROJECT_ROOT)
+    labels_order = label_repo.get_labels_order()
+    label_repo.validate_data_directories(data_path)
 
     tasks = []
 
@@ -54,13 +56,9 @@ def load_dataset():
     print("原始数据形状:", X.shape)
     print("原始标签形状:", y.shape)
 
-    # 构建 label -> index 映射（按照 labels_order 的顺序）
-    label_to_index = {label: idx for idx, label in enumerate(labels_order)}
-
-    # 检查是否存在未知标签（防止目录名拼写错误）
-    unknowns = set(y) - set(label_to_index.keys())
-    if unknowns:
-        raise ValueError(f"Found unknown labels not in labels_order: {unknowns}")
+    # 构建 label -> index 映射（严格按照 labels.json 的固定顺序）
+    label_to_index = label_repo.build_index_map()
+    label_repo.validate_labels(y)
 
     # 将字符串标签转换为索引
     y_indices = np.array([label_to_index[label] for label in y], dtype=np.int32)

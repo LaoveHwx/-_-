@@ -3,7 +3,7 @@ import mediapipe as mp
 import numpy as np
 import os
 from pathlib import Path
-from src.utils.labels import get_labels_order
+from src.utils.labels import LabelRepository
 from src.utils.normalizer import normalize_keypoints
 
 # 借用指令from src.capture.hand_tracker import HandTracker
@@ -42,29 +42,6 @@ class HandTracker:
 
         return frame, keypoints
     # # 手部关键点归一化,到 src/utils/normalizer.py
- 
-
-# GESTURES = {
-#     ord('1'): 'good',
-#     ord('2'): 'left',
-#     ord('3'): 'number1',
-#     ord('4'): 'number2',
-#     ord('5'): 'number3',
-#     ord('6'): 'heart',
-#     ord('7'): 'right',
-#     ord('8'): 'stop',
-# }
-#=====⬇️替换标签获取方式
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-labels_order = get_labels_order(PROJECT_ROOT)  # 会自动创建 models/labels.json（若不存在）
-
-# 生成按键映射：数字键 '1' -> labels_order[0], '2' -> labels_order[1], ...
-GESTURES = { ord(str(i+1)): label for i, label in enumerate(labels_order) }
-
-print("Key -> gesture mapping:")
-for i, label in enumerate(labels_order):
-    print(f"  {i+1} -> {label}")
-
 SAMPLES_PER_CLASS = 500
 
 def run_camera_test():
@@ -77,6 +54,15 @@ def run_camera_test():
     base_path = PROJECT_ROOT / "data" / "keypoints"
     # 创建数据目录
     os.makedirs(base_path, exist_ok=True)
+
+    # 通过标签仓储加载 / 创建 labels.json，并生成按键映射
+    label_repo = LabelRepository(PROJECT_ROOT)
+    labels_order = label_repo.get_labels_order()
+    gestures = {ord(str(i + 1)): label for i, label in enumerate(labels_order)}
+
+    print("Key -> gesture mapping:")
+    for i, label in enumerate(labels_order):
+        print(f"  {i+1} -> {label}")
     # 当前类别
     current_label = None
     # 样本计数
@@ -103,8 +89,8 @@ def run_camera_test():
         key = cv2.waitKey(1) & 0xFF
 
         # 选择类别
-        if key in GESTURES:
-            current_label = GESTURES[key]
+        if key in gestures:
+            current_label = gestures[key]
             class_dir = os.path.join(base_path, current_label)
             os.makedirs(class_dir, exist_ok=True)
 
@@ -123,7 +109,7 @@ def run_camera_test():
         # 开始采集
         if key == ord('c') and current_label:
             if sample_count >= SAMPLES_PER_CLASS:
-                print("该类别已达 300，无需继续")
+                print("该类别已达 500，无需继续")
             else:
                 collecting = True
                 print("开始采集")
@@ -142,7 +128,7 @@ def run_camera_test():
         # 采集逻辑
         if collecting and keypoints is not None:
             if sample_count < SAMPLES_PER_CLASS:
-                class_dir = os.path.join(base_path, current_label)
+                class_dir = os.path.join(base_path, current_label) # type: ignore
 
                 file_path = os.path.join(
                     class_dir,

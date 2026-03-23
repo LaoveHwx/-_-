@@ -1,5 +1,6 @@
 # 封装模型构建与保存
 from src.train.model import build_model
+from src.utils.labels import LabelRepository
 from pathlib import Path
 import json
 
@@ -14,7 +15,6 @@ class ModelManager:
         model_path = self.project_root / "models"
         model_path.mkdir(exist_ok=True)
         model.save(model_path / "gesture_model.keras")
-        labels_path = model_path / "labels.json"
-        with open(labels_path, "w", encoding="utf-8") as f:
-            json.dump(list(le.classes_), f)
+        label_repo = LabelRepository(self.project_root)
+        label_repo.save(list(le.classes_))
         return model_path
