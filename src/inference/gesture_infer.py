@@ -1,17 +1,19 @@
-import sys
-from pathlib import Path
-
-# 将项目根目录添加到 Python 路径
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT))
-
 import cv2
 import mediapipe as mp
 import tensorflow as tf
 import numpy as np
 from pathlib import Path
 from collections import deque
+import sys
+
+from src.inference.hwv import hwv
 from src.utils.labels import LabelRepository
+from src.utils.normalizer import extract_xy_keypoints, normalize_keypoints
+
+# 将项目根目录添加到 Python 路径
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+
 
 class GestureInference:
 
@@ -21,13 +23,13 @@ class GestureInference:
         model_path = self.project_root / "models" / "gesture_model.keras"
 
         # 加载模型
-        print("Loading model:", model_path)
+        print("正在加载模型:", model_path)
         self.model = tf.keras.models.load_model(model_path)
 
-        # 统一从 models/labels.json 读取标签顺序（通过 LabelRepository 统一管理）
+        # 统一从 models/labels.json 读取标签顺序
         label_repo = LabelRepository(self.project_root)
         self.gesture_labels = label_repo.get_labels_order()
-        print("Loaded gesture labels:", self.gesture_labels)
+        print("已加载手势标签:", self.gesture_labels)
 
         # 参数
         self.conf_threshold = conf_threshold
@@ -37,43 +39,23 @@ class GestureInference:
         self._conf_history = deque(maxlen=history_len)
 
         # MediaPipe 初始化
-        self.mp_hands = mp.solutions.hands
+        self.mp_hands = mp.solutions.hands  # type: ignore[attr-defined]
         self.hands = self.mp_hands.Hands(
             static_image_mode=False,
             max_num_hands=1,
             min_detection_confidence=0.7,
             min_tracking_confidence=0.7
         )
-        self.mp_drawing = mp.solutions.drawing_utils
-
-    # ------------------------------------------------
-    # 关键点提取（必须 42 维）再归一化
-    # ------------------------------------------------
-    def extract_keypoints(self, hand_landmarks):
-        keypoints = []
-        for lm in hand_landmarks.landmark:
-            keypoints.append(lm.x)
-            keypoints.append(lm.y)
-        return np.array(keypoints, dtype="float32")
-
-    def normalize_keypoints(self, keypoints):
-        pts = keypoints.reshape(21, 2)
-        wrist = pts[0]
-        pts = pts - wrist
-        scale = np.linalg.norm(pts[9])
-        if scale > 1e-6:
-            pts = pts / scale
-        return pts.flatten().astype("float32")
+        self.mp_drawing = mp.solutions.drawing_utils  # type: ignore[attr-defined]
 
     # ------------------------------------------------
     # 手势预测（返回与投票一致的置信度）
     # ------------------------------------------------
     def predict(self, keypoints):
+        
         keypoints = np.asarray(keypoints, dtype="float32")
-        preds = self.model.predict(keypoints, verbose=0)  # shape (1, num_classes)
-
+        preds = self.model.predict(keypoints, verbose=0)
         # print("preds:", preds)  # 调试用
-
         class_id = int(np.argmax(preds))
         confidence = float(preds[0][class_id])
 
@@ -81,24 +63,7 @@ class GestureInference:
         if confidence < self.conf_threshold:
             return "unknown", confidence
 
-        # 维护 id 与 confidence 历史
-        self.history.append(class_id)
-        self._conf_history.append(confidence)
-
-        # 投票决定最终类别
-        final_id = max(set(self.history), key=self.history.count)
-
-        # 计算 final_id 在历史中对应的平均置信度
-        try:
-            ids = list(self.history)
-            confs = list(self._conf_history)
-            if len(ids) != len(confs):
-                avg_conf = confidence
-            else:
-                matched = [c for i, c in zip(ids, confs) if i == final_id]
-                avg_conf = float(np.mean(matched)) if matched else confidence
-        except Exception:
-            avg_conf = confidence
+        final_id, avg_conf = hwv(self.history, self._conf_history, class_id, confidence)
 
         return self.gesture_labels[final_id], avg_conf
 
@@ -107,21 +72,20 @@ class GestureInference:
     # 若你想镜像显示给用户，可在显示前单独 flip，但不要在送入检测/归一化前 flip。
     # ------------------------------------------------
     def run(self, camera_id=0):
+        # 摄像头读帧
         cap = cv2.VideoCapture(camera_id)
         if not cap.isOpened():
-            print("Camera open failed")
+            print("摄像头打开失败")
             return
 
-        print("Press ESC to exit")
+        print("按ESC退出")
 
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
 
-            # 为保证与训练数据一致，送入 MediaPipe 前不做水平翻转
-            # （如果你采集时也用的是镜像显示，需确保采集与训练一致）
-            # frame_for_processing = cv2.flip(frame, 1)  # 不要这么做，除非采集也用了 flip
+            # 保证与训练数据一致
             frame_for_processing = frame
 
             h, w, _ = frame_for_processing.shape
@@ -137,9 +101,9 @@ class GestureInference:
                         self.mp_hands.HAND_CONNECTIONS
                     )
 
-                    # 提取关键点并归一化
-                    keypoints = self.extract_keypoints(hand_landmarks)
-                    keypoints = self.normalize_keypoints(keypoints)
+                    # 提取关键点并复用统一归一化逻辑
+                    keypoints = extract_xy_keypoints(hand_landmarks)
+                    keypoints = normalize_keypoints(keypoints)
                     keypoints = keypoints.reshape(1, -1)
 
                     # 推理

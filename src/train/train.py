@@ -11,8 +11,8 @@ from src.usecases.train_usecase import TrainUseCase
 
 def main():
     project_root = Path(__file__).resolve().parents[2]
-    config = AppConfig.default(project_root)
 
+    config = AppConfig.default(project_root)
     trainer = TrainUseCase(config)
     result = trainer.run()
 

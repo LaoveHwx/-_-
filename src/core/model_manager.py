@@ -2,7 +2,7 @@
 from src.train.model import build_model
 from src.utils.labels import LabelRepository
 from pathlib import Path
-import json
+
 
 class ModelManager:
     def __init__(self, project_root):
@@ -11,10 +11,10 @@ class ModelManager:
     def build(self, input_dim, num_classes):
         return build_model(input_dim, num_classes)
 
-    def save(self, model, le):
+    def save(self, model, labels):
         model_path = self.project_root / "models"
         model_path.mkdir(exist_ok=True)
         model.save(model_path / "gesture_model.keras")
         label_repo = LabelRepository(self.project_root)
-        label_repo.save(list(le.classes_))
+        label_repo.save(list(labels))
         return model_path

@@ -51,6 +51,7 @@ class LabelRepository:
     def build_index_map(self) -> dict[str, int]:
         """基于 labels.json 中的固定顺序构建 label -> index 映射。"""
         labels = self.get_labels_order()
+        # # { 键: 值   for   值, 键   in   可迭代列表 }
         return {label: idx for idx, label in enumerate(labels)}
 
     def validate_labels(self, labels: Iterable[str]) -> None:
@@ -58,13 +59,13 @@ class LabelRepository:
         known_labels = set(self.get_labels_order())
         unknown_labels = set(labels) - known_labels
         if unknown_labels:
-            raise ValueError(f"Found unknown labels not in models/labels.json: {sorted(unknown_labels)}")
+            raise ValueError(f"发现未知标签，不在 models/labels.json 中: {sorted(unknown_labels)}")
 
     def validate_data_directories(self, data_path: Path) -> None:
         """校验数据目录名与 labels.json 是否一致，但不要求目录顺序一致。"""
         data_path = Path(data_path)
         if not data_path.exists():
-            raise FileNotFoundError(f"Keypoint data path not found: {data_path}")
+            raise FileNotFoundError(f"未找到关键点数据路径: {data_path}")
 
         defined_labels = set(self.get_labels_order())
         directory_labels = {path.name for path in data_path.iterdir() if path.is_dir()}
