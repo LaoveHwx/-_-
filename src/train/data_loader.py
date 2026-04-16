@@ -9,6 +9,12 @@ from sklearn.model_selection import train_test_split
 from concurrent.futures import ThreadPoolExecutor
 
 from src.utils.labels import LabelRepository
+
+# ================================================================================
+# 【数据可视化模块导入】
+# ================================================================================
+from src.tools.visualizer import plot_dataset_distribution, plot_data_validity, plot_train_val_test_split
+# ================================================================================
 '''
 输入: .npy 文件，
 输出:模型能直接吃的 6 份数据：
@@ -153,5 +159,46 @@ def load_dataset():
     print("训练:", X_train.shape)
     print("验证:", X_val.shape)
     print("测试:", X_test.shape)
+
+# ================================================================================
+# 【生成数据处理可视化图表】
+# ================================================================================
+    try:
+        # 创建结果目录
+        results_dir = PROJECT_ROOT / "results" / "data_visualization"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 数据有效性对比图（英文 + 中文）
+        plot_data_validity(len(tasks), len(X), save_path=results_dir / "01_data_validity.png", lang="en")
+        plot_data_validity(len(tasks), len(X), save_path=results_dir / "01_数据有效性.png", lang="zh")
+        
+        # 原始数据集分布（在做train_test_split前的完整数据集，英文 + 中文）
+        plot_dataset_distribution(list(y), labels_order, save_path=results_dir / "02_dataset_distribution.png", lang="en")
+        plot_dataset_distribution(list(y), labels_order, save_path=results_dir / "02_数据集分布.png", lang="zh")
+        
+        # Train/Val/Test 分布对比
+        # 需要从one-hot编码恢复为标签字符串
+        y_train_labels = [labels_order[np.argmax(y_i)] for y_i in y_train]
+        y_val_labels = [labels_order[np.argmax(y_i)] for y_i in y_val]
+        y_test_labels = [labels_order[np.argmax(y_i)] for y_i in y_test]
+        
+        split_data = {
+            '训练': (len(X_train), y_train_labels),
+            '验证': (len(X_val), y_val_labels),
+            '测试': (len(X_test), y_test_labels),
+        }
+
+        split_data_en = {
+            'Train': (len(X_train), y_train_labels),
+            'Validation': (len(X_val), y_val_labels),
+            'Test': (len(X_test), y_test_labels),
+        }
+        plot_train_val_test_split(split_data_en, labels_order, save_path=results_dir / "03_train_val_test_split.png", lang="en")
+        plot_train_val_test_split(split_data, labels_order, save_path=results_dir / "03_训练_验证_测试_拆分.png", lang="zh")
+        
+        print(f"\n✓ 数据处理可视化已保存到: {results_dir}")
+    except Exception as e:
+        print(f"⚠ 数据可视化生成失败: {e}")
+# ================================================================================
 
     return X_train, X_val, X_test, y_train, y_val, y_test, labels_order

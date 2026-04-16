@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from src.utils.normalizer import normalize_keypoints
 from src.utils.labels import LabelRepository
+from src.utils.fps import FPSCounter
 SAMPLES_PER_CLASS = 500
 # import sys
 # 运行的时候把这个部分解除注释就行
@@ -148,6 +149,7 @@ class HandDataCollector:
             print("已暂停并保存进度")
 
     def run(self) -> None:
+        fps_counter = FPSCounter()
         try:
             while True:
                 # 从摄像头捕获一帧图像
@@ -178,6 +180,17 @@ class HandDataCollector:
                     else:
                         self.collecting = False
                         print("该手势类别采集完成")
+
+                fps = fps_counter.update()
+                cv2.putText(
+                    frame,
+                    f"FPS: {fps:.1f}",
+                    (10, 75),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 255, 255),
+                    2,
+                )
 
                 cv2.imshow("数据收集", frame)
 

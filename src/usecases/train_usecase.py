@@ -1,7 +1,18 @@
 from typing import Optional
+from pathlib import Path
 from src.core.config import AppConfig
 from src.core.model_manager import ModelManager
 from src.core.data_manager import DataManager
+
+# ================================================================================
+# 【模型训练可视化模块导入】
+# ================================================================================
+from src.tools.visualizer import (
+    plot_training_history, 
+    plot_confusion_matrix, 
+    plot_training_summary
+)
+# ================================================================================
 
 
 class TrainUseCase:
@@ -53,6 +64,33 @@ class TrainUseCase:
         model_path = None
         if self.config.save_model:
             model_path = self.model_manager.save(model, labels)
+        
+# ================================================================================
+# 【生成模型训练可视化图表】
+# ================================================================================
+        try:
+            # 创建结果目录
+            results_dir = Path(self.config.project_root) / "results" / "model_training"
+            results_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 1. 训练历史曲线（英文 + 中文）
+            plot_training_history(history, save_path=results_dir / "training_history.png", lang="en")
+            plot_training_history(history, save_path=results_dir / "训练历史.png", lang="zh")
+            
+            # 2. 混淆矩阵
+            y_pred_probs = model.predict(X_test, verbose=0)
+            plot_confusion_matrix(y_test, y_pred_probs, labels, save_path=results_dir / "confusion_matrix.png", lang="en")
+            plot_confusion_matrix(y_test, y_pred_probs, labels, save_path=results_dir / "混淆矩阵.png", lang="zh")
+            
+            # 3. 训练总结（英文 + 中文）
+            plot_training_summary(test_loss, test_acc, epochs, batch_size, save_path=results_dir / "training_summary.png", lang="en")
+            plot_training_summary(test_loss, test_acc, epochs, batch_size, save_path=results_dir / "训练总结.png", lang="zh")
+            
+            print(f"\n✓ 模型训练可视化已保存到: {results_dir}")
+        except Exception as e:
+            print(f"⚠ 模型可视化生成失败: {e}")
+# ================================================================================
+        
         # 6.返回训练历史、测试损失、测试准确率和模型保存路径的字典
         return {
             "history": history,
