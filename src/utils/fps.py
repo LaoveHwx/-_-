@@ -2,28 +2,32 @@ import time
 
 
 class FPSCounter:
-    """Simple smoothed FPS counter for real-time loops."""
+    """FPS counter that updates the displayed value at fixed intervals."""
 
-    def __init__(self, smooth_factor: float = 0.9):
-        self.smooth_factor = smooth_factor
+    def __init__(self, update_interval: float = 1.0):
+        self.update_interval = update_interval
         self._last_time = None
-        self._fps = 0.0
+        self._display_fps = 0.0
+        self._interval_start = None
+        self._frame_count = 0
 
     def update(self) -> float:
         now = time.perf_counter()
         if self._last_time is None:
             self._last_time = now
+            self._interval_start = now
             return 0.0
 
-        dt = now - self._last_time
         self._last_time = now
-        if dt <= 0:
-            return self._fps
+        self._frame_count += 1
 
-        current_fps = 1.0 / dt
-        if self._fps == 0.0:
-            self._fps = current_fps
-        else:
-            a = self.smooth_factor
-            self._fps = a * self._fps + (1.0 - a) * current_fps
-        return self._fps
+        if self._interval_start is None:
+            self._interval_start = now
+
+        elapsed = now - self._interval_start
+        if elapsed >= self.update_interval and elapsed > 0:
+            self._display_fps = self._frame_count / elapsed
+            self._frame_count = 0
+            self._interval_start = now
+
+        return self._display_fps

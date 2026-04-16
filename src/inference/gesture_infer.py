@@ -18,7 +18,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 class GestureInference:
 
-    def __init__(self, conf_threshold: float = 0.7, history_len: int = 5):
+    def __init__(self, conf_threshold: float = 0.7, history_len: int = 5, unknown_margin: float = 0.15):
         # 计算项目根路径（文件位于 src/inference -> parents[2] 通常到项目根）
         self.project_root = Path(__file__).resolve().parents[2]
         model_path = self.project_root / "models" / "gesture_model.keras"
@@ -34,6 +34,7 @@ class GestureInference:
 
         # 参数
         self.conf_threshold = conf_threshold
+        self.unknown_margin = unknown_margin
 
         # 滑动窗口（用于投票）
         self.history = deque(maxlen=history_len)
@@ -57,8 +58,15 @@ class GestureInference:
         keypoints = np.asarray(keypoints, dtype="float32")
         preds = self.model.predict(keypoints, verbose=0)
         # print("preds:", preds)  # 调试用
-        class_id = int(np.argmax(preds))
-        confidence = float(preds[0][class_id])
+        probs = preds[0]
+        class_id = int(np.argmax(probs))
+        confidence = float(probs[class_id])
+
+        # 若 top1 与 top2 太接近，视为不确定手势，反馈 unknown。
+        sorted_probs = np.sort(probs)
+        second_confidence = float(sorted_probs[-2]) if sorted_probs.size >= 2 else 0.0
+        if (confidence - second_confidence) < self.unknown_margin:
+            return "unknown", confidence
 
         # 置信度阈值判断
         if confidence < self.conf_threshold:
@@ -122,13 +130,14 @@ class GestureInference:
                     cv2.rectangle(frame_for_processing, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
                     text = f"{gesture} {conf:.2f}"
+                    text_color = (0, 0, 255) if gesture == "unknown" else (0, 255, 0)
                     cv2.putText(
                         frame_for_processing,
                         text,
                         (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.8,
-                        (0, 255, 0),
+                        text_color,
                         2
                     )
 
