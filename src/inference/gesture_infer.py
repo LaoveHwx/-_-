@@ -9,6 +9,7 @@ import sys
 from src.inference.hwv import hwv
 from src.utils.labels import LabelRepository
 from src.utils.normalizer import extract_xy_keypoints, normalize_keypoints
+from src.utils.fps import FPSCounter
 
 # 将项目根目录添加到 Python 路径
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -78,6 +79,8 @@ class GestureInference:
             print("摄像头打开失败")
             return
 
+        fps_counter = FPSCounter()
+
         print("按ESC退出")
 
         while True:
@@ -128,6 +131,17 @@ class GestureInference:
                         (0, 255, 0),
                         2
                     )
+
+            fps = fps_counter.update()
+            cv2.putText(
+                frame_for_processing,
+                f"FPS: {fps:.1f}",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 255, 255),
+                2,
+            )
 
             # 显示同一帧（未镜像,使用和采集方向一致即可），这样绘制与展示坐标一致
             cv2.imshow("Gesture Recognition", frame_for_processing)
