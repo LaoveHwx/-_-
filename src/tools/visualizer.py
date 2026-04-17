@@ -25,6 +25,7 @@ def plot_dataset_distribution(
     labels_order: List[str],
     save_path: Optional[Path] = None,
     lang: str = "en",
+    total_samples: Optional[int] = None,
 ) -> None:
     """绘制各类别样本数分布直方图。
     
@@ -41,6 +42,7 @@ def plot_dataset_distribution(
     
     labels = list(class_counts.keys())
     counts = list(class_counts.values())
+    total = total_samples if total_samples is not None else len(y_labels)
     
     fig, ax = plt.subplots(figsize=(10, 6))
     bars = ax.bar(labels, counts, color='steelblue', edgecolor='black', alpha=0.7)
@@ -54,12 +56,12 @@ def plot_dataset_distribution(
     
     if lang == "zh":
         ax.set_xlabel('手势类别', fontsize=12, fontweight='bold')
-        ax.set_ylabel('样本数量', fontsize=12, fontweight='bold')
-        ax.set_title('手势类别数据分布', fontsize=14, fontweight='bold')
+        ax.set_ylabel(f'样本数量（总计={total}）', fontsize=12, fontweight='bold')
+        ax.set_title(f'手势类别数据分布（总样本={total}）', fontsize=14, fontweight='bold')
     else:
         ax.set_xlabel('Gesture Class', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Sample Count', fontsize=12, fontweight='bold')
-        ax.set_title('Dataset Distribution by Gesture Class', fontsize=14, fontweight='bold')
+        ax.set_ylabel(f'Sample Count (Total={total})', fontsize=12, fontweight='bold')
+        ax.set_title(f'Dataset Distribution by Gesture Class (Total={total})', fontsize=14, fontweight='bold')
     ax.grid(axis='y', alpha=0.3, linestyle='--')
     
     plt.xticks(rotation=45, ha='right')
@@ -67,7 +69,7 @@ def plot_dataset_distribution(
     
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"✓ 保存数据集分布图: {save_path}")
+        print(f"[OK] 保存数据集分布图: {save_path}")
     plt.close()
 
 # ================================================================================
@@ -105,7 +107,7 @@ def plot_data_validity(
     
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"✓ 保存数据有效性图: {save_path}")
+        print(f"[OK] 保存数据有效性图: {save_path}")
     plt.close()
 
 # ================================================================================
@@ -129,24 +131,29 @@ def plot_train_val_test_split(dataset_split: Dict[str, Tuple[int, List[str]]],
     
     datasets_info = []
     colors = ['#3498db', '#f39c12', '#e74c3c']
+    split_total = sum(total for total, _ in dataset_split.values())
     
-    for (dataset_name, (_, y_labels)), color in zip(dataset_split.items(), colors):
+    for (dataset_name, (dataset_total, y_labels)), color in zip(dataset_split.items(), colors):
         counts = [y_labels.count(label) for label in labels_order]
-        datasets_info.append((dataset_name, counts, color))
+        datasets_info.append((dataset_name, dataset_total, counts, color))
     
-    for i, (dataset_name, counts, color) in enumerate(datasets_info):
+    for i, (dataset_name, dataset_total, counts, color) in enumerate(datasets_info):
         offset = (i - 1) * width
-        ax.bar(x + offset, counts, width, label=dataset_name, color=color, 
+        if lang == "zh":
+            legend_label = f'{dataset_name} (n={dataset_total})'
+        else:
+            legend_label = f'{dataset_name} (n={dataset_total})'
+        ax.bar(x + offset, counts, width, label=legend_label, color=color, 
                alpha=0.8, edgecolor='black')
     
     if lang == "zh":
         ax.set_xlabel('手势类别', fontsize=12, fontweight='bold')
-        ax.set_ylabel('样本数量', fontsize=12, fontweight='bold')
-        ax.set_title('训练/验证/测试集分布', fontsize=14, fontweight='bold')
+        ax.set_ylabel(f'每类样本数（总计={split_total}）', fontsize=12, fontweight='bold')
+        ax.set_title(f'训练/验证/测试集分布（总样本={split_total}）', fontsize=14, fontweight='bold')
     else:
         ax.set_xlabel('Gesture Class', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Sample Count', fontsize=12, fontweight='bold')
-        ax.set_title('Train/Val/Test Set Distribution', fontsize=14, fontweight='bold')
+        ax.set_ylabel(f'Samples Per Class (Total={split_total})', fontsize=12, fontweight='bold')
+        ax.set_title(f'Train/Val/Test Set Distribution (Total={split_total})', fontsize=14, fontweight='bold')
     ax.set_xticks(x)
     ax.set_xticklabels(labels_order, rotation=45, ha='right')
     ax.legend(fontsize=11)
@@ -156,13 +163,19 @@ def plot_train_val_test_split(dataset_split: Dict[str, Tuple[int, List[str]]],
     
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"✓ 保存数据集划分图: {save_path}")
+        print(f"[OK] 保存数据集划分图: {save_path}")
     plt.close()
 
 # ================================================================================
 # 【图表4：训练历史曲线 - Loss & 准确率】
 # ================================================================================
-def plot_training_history(history, save_path: Optional[Path] = None, lang: str = "en") -> None:
+def plot_training_history(
+    history,
+    save_path: Optional[Path] = None,
+    lang: str = "en",
+    train_samples: Optional[int] = None,
+    val_samples: Optional[int] = None,
+) -> None:
     """绘制训练过程中Loss和准确率的变化曲线。
     
     Args:
@@ -175,22 +188,43 @@ def plot_training_history(history, save_path: Optional[Path] = None, lang: str =
     loss_label = '训练损失' if lang == "zh" else 'Train Loss'
     val_loss_label = '验证损失' if lang == "zh" else 'Validation Loss'
     epoch_label = '轮次' if lang == "zh" else 'Epoch'
-    axes[0].plot(history.history['loss'], label=loss_label, linewidth=2, marker='o', markersize=4)
-    axes[0].plot(history.history['val_loss'], label=val_loss_label, linewidth=2, marker='s', markersize=4)
+    epoch_count = len(history.history['loss'])
+    epochs_idx = np.arange(1, epoch_count + 1)
+
+    axes[0].plot(epochs_idx, history.history['loss'], label=loss_label, linewidth=2, marker='o', markersize=4)
+    axes[0].plot(epochs_idx, history.history['val_loss'], label=val_loss_label, linewidth=2, marker='s', markersize=4)
     axes[0].set_xlabel(epoch_label, fontsize=12, fontweight='bold')
     axes[0].set_ylabel('损失' if lang == "zh" else 'Loss', fontsize=12, fontweight='bold')
-    axes[0].set_title('训练损失曲线' if lang == "zh" else 'Training Loss Curve', fontsize=13, fontweight='bold')
+    if lang == "zh":
+        title_loss = f'训练损失曲线（轮次=1~{epoch_count}）'
+        if train_samples is not None and val_samples is not None:
+            title_loss += f'\n训练集={train_samples}, 验证集={val_samples}'
+    else:
+        title_loss = f'Training Loss Curve (Epoch 1-{epoch_count})'
+        if train_samples is not None and val_samples is not None:
+            title_loss += f'\nTrain={train_samples}, Validation={val_samples}'
+    axes[0].set_title(title_loss, fontsize=13, fontweight='bold')
+    axes[0].set_xticks(epochs_idx)
     axes[0].legend(fontsize=11)
     axes[0].grid(alpha=0.3, linestyle='--')
     
     # 准确率曲线
     acc_label = '训练准确率' if lang == "zh" else 'Train Accuracy'
     val_acc_label = '验证准确率' if lang == "zh" else 'Validation Accuracy'
-    axes[1].plot(history.history['accuracy'], label=acc_label, linewidth=2, marker='o', markersize=4)
-    axes[1].plot(history.history['val_accuracy'], label=val_acc_label, linewidth=2, marker='s', markersize=4)
+    axes[1].plot(epochs_idx, history.history['accuracy'], label=acc_label, linewidth=2, marker='o', markersize=4)
+    axes[1].plot(epochs_idx, history.history['val_accuracy'], label=val_acc_label, linewidth=2, marker='s', markersize=4)
     axes[1].set_xlabel(epoch_label, fontsize=12, fontweight='bold')
     axes[1].set_ylabel('准确率' if lang == "zh" else 'Accuracy', fontsize=12, fontweight='bold')
-    axes[1].set_title('训练准确率曲线' if lang == "zh" else 'Training Accuracy Curve', fontsize=13, fontweight='bold')
+    if lang == "zh":
+        title_acc = f'训练准确率曲线（轮次=1~{epoch_count}）'
+        if train_samples is not None and val_samples is not None:
+            title_acc += f'\n训练集={train_samples}, 验证集={val_samples}'
+    else:
+        title_acc = f'Training Accuracy Curve (Epoch 1-{epoch_count})'
+        if train_samples is not None and val_samples is not None:
+            title_acc += f'\nTrain={train_samples}, Validation={val_samples}'
+    axes[1].set_title(title_acc, fontsize=13, fontweight='bold')
+    axes[1].set_xticks(epochs_idx)
     axes[1].legend(fontsize=11)
     axes[1].grid(alpha=0.3, linestyle='--')
     axes[1].set_ylim([0, 1.05])
@@ -199,7 +233,7 @@ def plot_training_history(history, save_path: Optional[Path] = None, lang: str =
     
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"✓ 保存训练历史图: {save_path}")
+        print(f"[OK] 保存训练历史图: {save_path}")
     plt.close()
 
 # ================================================================================
@@ -208,7 +242,8 @@ def plot_training_history(history, save_path: Optional[Path] = None, lang: str =
 def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, 
                          labels_order: List[str],
                          save_path: Optional[Path] = None,
-                         lang: str = "en") -> None:
+                         lang: str = "en",
+                         test_samples: Optional[int] = None) -> None:
     """绘制混淆矩阵热力图。
     
     Args:
@@ -222,6 +257,7 @@ def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray,
     # 转换为类别索引
     y_true_classes = np.argmax(y_true, axis=1)
     y_pred_classes = np.argmax(y_pred, axis=1)
+    sample_count = test_samples if test_samples is not None else len(y_true_classes)
     
     cm = confusion_matrix(y_true_classes, y_pred_classes)
     
@@ -236,11 +272,11 @@ def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray,
     if lang == "zh":
         ax.set_xlabel('预测类别', fontsize=12, fontweight='bold')
         ax.set_ylabel('真实类别', fontsize=12, fontweight='bold')
-        ax.set_title('混淆矩阵（测试集）', fontsize=14, fontweight='bold')
+        ax.set_title(f'混淆矩阵（测试集样本={sample_count}）', fontsize=14, fontweight='bold')
     else:
         ax.set_xlabel('Predicted Label', fontsize=12, fontweight='bold')
         ax.set_ylabel('True Label', fontsize=12, fontweight='bold')
-        ax.set_title('Confusion Matrix (Test Set)', fontsize=14, fontweight='bold')
+        ax.set_title(f'Confusion Matrix (Test Samples={sample_count})', fontsize=14, fontweight='bold')
     ax.set_xticks(np.arange(len(labels_order)))
     ax.set_yticks(np.arange(len(labels_order)))
     ax.set_xticklabels(labels_order, rotation=45, ha='right')
@@ -251,7 +287,7 @@ def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray,
     
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"✓ 保存混淆矩阵图: {save_path}")
+        print(f"[OK] 保存混淆矩阵图: {save_path}")
     plt.close()
 
 # ================================================================================
@@ -260,7 +296,10 @@ def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray,
 def plot_training_summary(test_loss: float, test_acc: float, 
                          epochs: int, batch_size: int,
                          save_path: Optional[Path] = None,
-                         lang: str = "en") -> None:
+                         lang: str = "en",
+                         train_samples: Optional[int] = None,
+                         val_samples: Optional[int] = None,
+                         test_samples: Optional[int] = None) -> None:
     """生成训练总结文本图。
     
     Args:
@@ -274,6 +313,10 @@ def plot_training_summary(test_loss: float, test_acc: float,
     ax.axis('off')
     
     if lang == "zh":
+        total_samples = None
+        if train_samples is not None and val_samples is not None and test_samples is not None:
+            total_samples = train_samples + val_samples + test_samples
+
         summary_text = f"""
     训练结果汇总
     ========================================
@@ -283,10 +326,18 @@ def plot_training_summary(test_loss: float, test_acc: float,
     
     训练轮数:          {epochs}
     批大小:            {batch_size}
+    训练集样本:        {train_samples if train_samples is not None else 'N/A'}
+    验证集样本:        {val_samples if val_samples is not None else 'N/A'}
+    测试集样本:        {test_samples if test_samples is not None else 'N/A'}
+    全部样本:          {total_samples if total_samples is not None else 'N/A'}
     
     ========================================
     """
     else:
+        total_samples = None
+        if train_samples is not None and val_samples is not None and test_samples is not None:
+            total_samples = train_samples + val_samples + test_samples
+
         summary_text = f"""
     TRAINING SUMMARY
     ========================================
@@ -296,6 +347,10 @@ def plot_training_summary(test_loss: float, test_acc: float,
     
     Training Epochs:    {epochs}
     Batch Size:         {batch_size}
+    Train Samples:      {train_samples if train_samples is not None else 'N/A'}
+    Validation Samples: {val_samples if val_samples is not None else 'N/A'}
+    Test Samples:       {test_samples if test_samples is not None else 'N/A'}
+    Total Samples:      {total_samples if total_samples is not None else 'N/A'}
     
     ========================================
     """
@@ -309,7 +364,7 @@ def plot_training_summary(test_loss: float, test_acc: float,
     
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"✓ 保存训练总结: {save_path}")
+        print(f"[OK] 保存训练总结: {save_path}")
     plt.close()
 
 # ================================================================================

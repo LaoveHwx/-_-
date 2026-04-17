@@ -41,6 +41,9 @@ class TrainUseCase:
 
         # 1.加载数据，同时拿到固定标签顺序用于保存映射
         X_train, X_val, X_test, y_train, y_val, y_test, labels = self.data_manager.load()
+        train_samples = len(X_train)
+        val_samples = len(X_val)
+        test_samples = len(X_test)
 
         #从训练数据实际形状里推出来输入维度和类别数量，避免硬编码
         input_dim = X_train.shape[1]
@@ -74,21 +77,67 @@ class TrainUseCase:
             results_dir.mkdir(parents=True, exist_ok=True)
             
             # 1. 训练历史曲线（英文 + 中文）
-            plot_training_history(history, save_path=results_dir / "training_history.png", lang="en")
-            plot_training_history(history, save_path=results_dir / "训练历史.png", lang="zh")
+            plot_training_history(
+                history,
+                save_path=results_dir / "training_history.png",
+                lang="en",
+                train_samples=train_samples,
+                val_samples=val_samples,
+            )
+            plot_training_history(
+                history,
+                save_path=results_dir / "训练历史.png",
+                lang="zh",
+                train_samples=train_samples,
+                val_samples=val_samples,
+            )
             
             # 2. 混淆矩阵
             y_pred_probs = model.predict(X_test, verbose=0)
-            plot_confusion_matrix(y_test, y_pred_probs, labels, save_path=results_dir / "confusion_matrix.png", lang="en")
-            plot_confusion_matrix(y_test, y_pred_probs, labels, save_path=results_dir / "混淆矩阵.png", lang="zh")
+            plot_confusion_matrix(
+                y_test,
+                y_pred_probs,
+                labels,
+                save_path=results_dir / "confusion_matrix.png",
+                lang="en",
+                test_samples=test_samples,
+            )
+            plot_confusion_matrix(
+                y_test,
+                y_pred_probs,
+                labels,
+                save_path=results_dir / "混淆矩阵.png",
+                lang="zh",
+                test_samples=test_samples,
+            )
             
             # 3. 训练总结（英文 + 中文）
-            plot_training_summary(test_loss, test_acc, epochs, batch_size, save_path=results_dir / "training_summary.png", lang="en")
-            plot_training_summary(test_loss, test_acc, epochs, batch_size, save_path=results_dir / "训练总结.png", lang="zh")
+            plot_training_summary(
+                test_loss,
+                test_acc,
+                epochs,
+                batch_size,
+                save_path=results_dir / "training_summary.png",
+                lang="en",
+                train_samples=train_samples,
+                val_samples=val_samples,
+                test_samples=test_samples,
+            )
+            plot_training_summary(
+                test_loss,
+                test_acc,
+                epochs,
+                batch_size,
+                save_path=results_dir / "训练总结.png",
+                lang="zh",
+                train_samples=train_samples,
+                val_samples=val_samples,
+                test_samples=test_samples,
+            )
             
-            print(f"\n✓ 模型训练可视化已保存到: {results_dir}")
+            print(f"\n[OK] 模型训练可视化已保存到: {results_dir}")
         except Exception as e:
-            print(f"⚠ 模型可视化生成失败: {e}")
+            print(f"[WARN] 模型可视化生成失败: {e}")
 # ================================================================================
         
         # 6.返回训练历史、测试损失、测试准确率和模型保存路径的字典

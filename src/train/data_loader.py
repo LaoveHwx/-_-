@@ -173,8 +173,21 @@ def load_dataset():
         plot_data_validity(len(tasks), len(X), save_path=results_dir / "01_数据有效性.png", lang="zh")
         
         # 原始数据集分布（在做train_test_split前的完整数据集，英文 + 中文）
-        plot_dataset_distribution(list(y), labels_order, save_path=results_dir / "02_dataset_distribution.png", lang="en")
-        plot_dataset_distribution(list(y), labels_order, save_path=results_dir / "02_数据集分布.png", lang="zh")
+        total_valid_samples = len(X)
+        plot_dataset_distribution(
+            list(y),
+            labels_order,
+            save_path=results_dir / "02_dataset_distribution.png",
+            lang="en",
+            total_samples=total_valid_samples,
+        )
+        plot_dataset_distribution(
+            list(y),
+            labels_order,
+            save_path=results_dir / "02_数据集分布.png",
+            lang="zh",
+            total_samples=total_valid_samples,
+        )
         
         # Train/Val/Test 分布对比
         # 需要从one-hot编码恢复为标签字符串
@@ -196,9 +209,9 @@ def load_dataset():
         plot_train_val_test_split(split_data_en, labels_order, save_path=results_dir / "03_train_val_test_split.png", lang="en")
         plot_train_val_test_split(split_data, labels_order, save_path=results_dir / "03_训练_验证_测试_拆分.png", lang="zh")
         
-        print(f"\n✓ 数据处理可视化已保存到: {results_dir}")
+        print(f"\n[OK] 数据处理可视化已保存到: {results_dir}")
     except Exception as e:
-        print(f"⚠ 数据可视化生成失败: {e}")
+        print(f"[WARN] 数据可视化生成失败: {e}")
 # ================================================================================
 
     return X_train, X_val, X_test, y_train, y_val, y_test, labels_order
