@@ -125,38 +125,56 @@ def plot_train_val_test_split(dataset_split: Dict[str, Tuple[int, List[str]]],
         save_path: 保存路径
     """
     fig, ax = plt.subplots(figsize=(12, 6))
-    
-    x = np.arange(len(labels_order))
-    width = 0.25
-    
-    datasets_info = []
-    colors = ['#3498db', '#f39c12', '#e74c3c']
+
+    dataset_names = list(dataset_split.keys())
+    x = np.arange(len(dataset_names))
+    width = 0.6
     split_total = sum(total for total, _ in dataset_split.values())
-    
-    for (dataset_name, (dataset_total, y_labels)), color in zip(dataset_split.items(), colors):
-        counts = [y_labels.count(label) for label in labels_order]
-        datasets_info.append((dataset_name, dataset_total, counts, color))
-    
-    for i, (dataset_name, dataset_total, counts, color) in enumerate(datasets_info):
-        offset = (i - 1) * width
-        if lang == "zh":
-            legend_label = f'{dataset_name} (n={dataset_total})'
-        else:
-            legend_label = f'{dataset_name} (n={dataset_total})'
-        ax.bar(x + offset, counts, width, label=legend_label, color=color, 
-               alpha=0.8, edgecolor='black')
-    
+
+    category_colors = plt.cm.tab20(np.linspace(0, 1, len(labels_order)))
+    bottoms = np.zeros(len(dataset_names), dtype=np.float64)
+
+    for class_idx, label in enumerate(labels_order):
+        counts = np.array(
+            [dataset_split[ds_name][1].count(label) for ds_name in dataset_names],
+            dtype=np.float64,
+        )
+        ax.bar(
+            x,
+            counts,
+            width,
+            bottom=bottoms,
+            label=label,
+            color=category_colors[class_idx],
+            edgecolor='white',
+            linewidth=0.4,
+        )
+        bottoms += counts
+
+    dataset_totals = [dataset_split[ds_name][0] for ds_name in dataset_names]
+    for i, total in enumerate(dataset_totals):
+        ax.text(
+            x[i],
+            total + max(dataset_totals) * 0.01,
+            f'n={total}',
+            ha='center',
+            va='bottom',
+            fontsize=10,
+            fontweight='bold',
+        )
+
     if lang == "zh":
-        ax.set_xlabel('手势类别', fontsize=12, fontweight='bold')
-        ax.set_ylabel(f'每类样本数（总计={split_total}）', fontsize=12, fontweight='bold')
-        ax.set_title(f'训练/验证/测试集分布（总样本={split_total}）', fontsize=14, fontweight='bold')
+        ax.set_xlabel('数据集划分', fontsize=12, fontweight='bold')
+        ax.set_ylabel(f'样本数量（总计={split_total}）', fontsize=12, fontweight='bold')
+        ax.set_title(f'训练/验证/测试集样本构成（堆叠，总样本={split_total}）', fontsize=14, fontweight='bold')
     else:
-        ax.set_xlabel('Gesture Class', fontsize=12, fontweight='bold')
-        ax.set_ylabel(f'Samples Per Class (Total={split_total})', fontsize=12, fontweight='bold')
-        ax.set_title(f'Train/Val/Test Set Distribution (Total={split_total})', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Dataset Split', fontsize=12, fontweight='bold')
+        ax.set_ylabel(f'Sample Count (Total={split_total})', fontsize=12, fontweight='bold')
+        ax.set_title(f'Train/Val/Test Sample Composition (Stacked, Total={split_total})', fontsize=14, fontweight='bold')
     ax.set_xticks(x)
-    ax.set_xticklabels(labels_order, rotation=45, ha='right')
-    ax.legend(fontsize=11)
+    ax.set_xticklabels(dataset_names)
+    ax.set_ylim(0, max(dataset_totals) * 1.08)
+    ax.legend(fontsize=9, ncols=2)
     ax.grid(axis='y', alpha=0.3, linestyle='--')
     
     plt.tight_layout()
@@ -354,10 +372,11 @@ def plot_training_summary(test_loss: float, test_acc: float,
     
     ========================================
     """
-    
+
+    summary_fontfamily = 'sans-serif' if lang == "zh" else 'monospace'
     ax.text(0.5, 0.5, summary_text, transform=ax.transAxes,
             fontsize=12, verticalalignment='center', horizontalalignment='center',
-            fontfamily='monospace', 
+            fontfamily=summary_fontfamily,
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
     plt.tight_layout()
@@ -368,3 +387,156 @@ def plot_training_summary(test_loss: float, test_acc: float,
     plt.close()
 
 # ================================================================================
+
+def generate_thesis_data_analysis_figures(
+    keypoints_root: Path,
+    output_dir: Path,
+    labels_order: List[str],
+    lang: str = "zh",
+) -> List[Path]:
+    """基于真实关键点数据生成4张数据分析图（非流程图）。
+
+    图1: 各类别样本数量
+    图2: 各类别有效/无效样本对比
+    图3: 参考尺度(腕点到9号点距离)分布
+    图4: 归一化后特征L2范数分布
+    """
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    class_counts: Dict[str, int] = {lb: 0 for lb in labels_order}
+    valid_counts: Dict[str, int] = {lb: 0 for lb in labels_order}
+    invalid_counts: Dict[str, int] = {lb: 0 for lb in labels_order}
+
+    scale_by_class: Dict[str, List[float]] = {lb: [] for lb in labels_order}
+    norm_by_class: Dict[str, List[float]] = {lb: [] for lb in labels_order}
+
+    def _to_xy42(arr: np.ndarray) -> Optional[np.ndarray]:
+        a = np.asarray(arr)
+        if a.ndim == 1 and a.shape[0] == 42:
+            xy = a.reshape(21, 2)
+        elif a.ndim == 2 and a.shape == (21, 2):
+            xy = a
+        elif a.ndim == 2 and a.shape == (21, 3):
+            xy = a[:, :2]
+        else:
+            return None
+
+        if not np.isfinite(xy).all():
+            return None
+
+        # 参考尺度: 第0点(腕点)到第9点距离
+        scale = float(np.linalg.norm(xy[9] - xy[0]))
+        if scale <= 1e-8:
+            return None
+
+        centered = xy - xy[0]
+        normalized = centered / scale
+        return normalized.reshape(-1)
+
+    for lb in labels_order:
+        class_dir = keypoints_root / lb
+        if not class_dir.exists():
+            continue
+        files = sorted(class_dir.glob("*.npy"))
+        class_counts[lb] = len(files)
+
+        for fp in files:
+            try:
+                arr = np.load(fp)
+                # 原始尺度用于图3
+                if arr.ndim == 2 and arr.shape[0] == 21:
+                    xy_raw = arr[:, :2]
+                elif arr.ndim == 1 and arr.shape[0] == 42:
+                    xy_raw = arr.reshape(21, 2)
+                else:
+                    xy_raw = None
+
+                if xy_raw is not None and np.isfinite(xy_raw).all():
+                    raw_scale = float(np.linalg.norm(xy_raw[9] - xy_raw[0]))
+                    if raw_scale > 1e-8:
+                        scale_by_class[lb].append(raw_scale)
+
+                feat = _to_xy42(arr)
+                if feat is None:
+                    invalid_counts[lb] += 1
+                    continue
+
+                valid_counts[lb] += 1
+                norm_by_class[lb].append(float(np.linalg.norm(feat)))
+            except Exception:
+                invalid_counts[lb] += 1
+
+    # 图1: 各类别样本数量
+    p1 = output_dir / "data_analysis_01_class_count.png"
+    fig, ax = plt.subplots(figsize=(10, 6))
+    xs = np.arange(len(labels_order))
+    ys = [class_counts[lb] for lb in labels_order]
+    bars = ax.bar(xs, ys, color="#4C78A8", edgecolor="black", alpha=0.85)
+    for b in bars:
+        h = b.get_height()
+        ax.text(b.get_x() + b.get_width() / 2, h, f"{int(h)}", ha="center", va="bottom", fontsize=10)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(labels_order, rotation=30, ha="right")
+    ax.set_ylabel("样本数量" if lang == "zh" else "Sample Count")
+    ax.set_title("各手势类别样本数量分布" if lang == "zh" else "Class-wise Sample Count")
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(p1, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    # 图2: 有效/无效样本对比
+    p2 = output_dir / "data_analysis_02_valid_invalid.png"
+    fig, ax = plt.subplots(figsize=(10, 6))
+    valid_vals = np.array([valid_counts[lb] for lb in labels_order], dtype=np.float64)
+    invalid_vals = np.array([invalid_counts[lb] for lb in labels_order], dtype=np.float64)
+    ax.bar(xs, valid_vals, color="#59A14F", label="有效样本" if lang == "zh" else "Valid")
+    ax.bar(xs, invalid_vals, bottom=valid_vals, color="#E15759", label="无效样本" if lang == "zh" else "Invalid")
+    ax.set_xticks(xs)
+    ax.set_xticklabels(labels_order, rotation=30, ha="right")
+    ax.set_ylabel("样本数量" if lang == "zh" else "Sample Count")
+    ax.set_title("各类别样本有效性统计" if lang == "zh" else "Valid/Invalid Samples by Class")
+    ax.legend()
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(p2, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    # 图3: 原始参考尺度分布(箱线图)
+    p3 = output_dir / "data_analysis_03_scale_boxplot.png"
+    fig, ax = plt.subplots(figsize=(10, 6))
+    scale_data = [scale_by_class[lb] if len(scale_by_class[lb]) > 0 else [0.0] for lb in labels_order]
+    bp = ax.boxplot(scale_data, patch_artist=True, labels=labels_order, showfliers=False)
+    for patch in bp["boxes"]:
+        patch.set(facecolor="#F28E2B", alpha=0.65)
+    ax.set_xticklabels(labels_order, rotation=30, ha="right")
+    ax.set_ylabel("腕点到9号点距离" if lang == "zh" else "Distance(landmark0, landmark9)")
+    ax.set_title("原始关键点参考尺度分布" if lang == "zh" else "Raw Scale Distribution by Class")
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(p3, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    # 图4: 归一化后特征L2范数分布(小提琴图)
+    p4 = output_dir / "data_analysis_04_norm_violin.png"
+    fig, ax = plt.subplots(figsize=(10, 6))
+    norm_data = [norm_by_class[lb] if len(norm_by_class[lb]) > 0 else [0.0] for lb in labels_order]
+    parts = ax.violinplot(norm_data, showmeans=True, showextrema=False)
+    for pc in parts["bodies"]:
+        pc.set_facecolor("#B07AA1")
+        pc.set_edgecolor("black")
+        pc.set_alpha(0.65)
+    ax.set_xticks(np.arange(1, len(labels_order) + 1))
+    ax.set_xticklabels(labels_order, rotation=30, ha="right")
+    ax.set_ylabel("归一化特征L2范数" if lang == "zh" else "L2 Norm of Normalized Features")
+    ax.set_title("归一化后特征能量分布" if lang == "zh" else "Feature Energy After Normalization")
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(p4, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    saved = [p1, p2, p3, p4]
+    for p in saved:
+        print(f"[OK] 生成分析图: {p}")
+    return saved
+
